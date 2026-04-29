@@ -4,6 +4,8 @@ set -euo pipefail
 DIST_DIR="${HOME}/.cache/JetBrains/RemoteDev/dist"
 SESSION_PREFIX="clion-dl"
 DEFAULT_PARALLEL=2
+INNER_BACKUP_DIR="${INNER_BACKUP_DIR:-${HOME}/backups}"
+OUTER_BACKUP_DIR="${OUTER_BACKUP_DIR:-/workspace/backups}"
 
 usage() {
     cat <<'EOF'
@@ -11,9 +13,14 @@ usage:
   clion-backend-download.sh start <url> [N]   start N parallel workers (default 2)
   clion-backend-download.sh status            list sessions, processes, files
   clion-backend-download.sh attach [N]        attach to worker N (default 1)
-  clion-backend-download.sh finalize [name]   verify largest .tar.gz and rename
+  clion-backend-download.sh finalize [name]   verify largest .tar.gz, rename,
+                                              extract + .expandSucceeded, backup
                                               (auto-detects canonical name from
                                               Gateway-created dir if not given)
+  clion-backend-download.sh expand [name]     extract archive into <name-no-ext>/
+                                              and touch .expandSucceeded
+  clion-backend-download.sh backup [name]     hardlink to $INNER_BACKUP_DIR and
+                                              reflink-copy to $OUTER_BACKUP_DIR
   clion-backend-download.sh stop              kill all workers
 EOF
     exit 1
@@ -77,6 +84,51 @@ cmd_start() {
     echo "attach:  clion-backend-download.sh attach [N]"
 }
 
+expand_archive() {
+    local archive="$1"
+    local extract_dir="${archive%.tar.gz}"
+
+    mkdir -p "$extract_dir"
+    if [[ -f "$extract_dir/.expandSucceeded" ]]; then
+        echo "  [skip] $extract_dir already expanded"
+        return
+    fi
+
+    echo "  extracting $archive -> $extract_dir/"
+    tar -xzf "$archive" -C "$extract_dir" --strip-components=1
+    touch "$extract_dir/.expandSucceeded"
+    echo "  [ok] .expandSucceeded set — Gateway will skip its own download/extract"
+}
+
+backup_archive() {
+    local src="$1"
+    local fname; fname="$(basename "$src")"
+
+    mkdir -p "$INNER_BACKUP_DIR"
+    local inner="${INNER_BACKUP_DIR}/${fname}"
+    if [[ -e "$inner" ]] && [[ "$(stat -c%i "$src")" == "$(stat -c%i "$inner")" ]]; then
+        echo "  [skip] inner hardlink already in place: $inner"
+    else
+        rm -f "$inner"
+        ln "$src" "$inner"
+        echo "  [ok] inner hardlink: $inner (inode $(stat -c%i "$inner"))"
+    fi
+
+    if [[ -d "$(dirname "$OUTER_BACKUP_DIR")" ]]; then
+        mkdir -p "$OUTER_BACKUP_DIR"
+        local outer="${OUTER_BACKUP_DIR}/${fname}"
+        if [[ -f "$outer" ]] && [[ "$(stat -c%s "$outer")" == "$(stat -c%s "$src")" ]]; then
+            echo "  [skip] outer copy already exists: $outer"
+        else
+            cp --reflink=auto "$src" "$outer"
+            sha256sum "$src" | awk -v p="$outer" '{print $1"  "p}' > "${outer}.sha256"
+            echo "  [ok] outer copy: $outer (+.sha256)"
+        fi
+    else
+        echo "  [warn] outer backup parent $(dirname "$OUTER_BACKUP_DIR") missing — skipping host-side backup" >&2
+    fi
+}
+
 cmd_status() {
     echo "--- tmux sessions ---"
     tmux ls 2>/dev/null | grep "^${SESSION_PREFIX}-" || echo "  (none)"
@@ -134,7 +186,33 @@ cmd_finalize() {
     [[ "$pick" != "$target" ]] && mv -v "$pick" "$target" || true
     rm -f "$DIST_DIR"/*.tar.gz.*
 
+    echo "expanding archive..."
+    expand_archive "$DIST_DIR/$target"
+
+    echo "creating backups..."
+    backup_archive "$DIST_DIR/$target"
+
     echo "done. on host: Gateway -> Reconnect."
+}
+
+cmd_backup() {
+    local target="${1:-}"
+    if [[ -z "$target" ]]; then
+        target="$(detect_target)"
+        [[ -z "$target" ]] && { echo "error: cannot auto-detect archive name" >&2; exit 1; }
+    fi
+    [[ -f "$DIST_DIR/$target" ]] || { echo "error: $DIST_DIR/$target not found" >&2; exit 1; }
+    backup_archive "$DIST_DIR/$target"
+}
+
+cmd_expand() {
+    local target="${1:-}"
+    if [[ -z "$target" ]]; then
+        target="$(detect_target)"
+        [[ -z "$target" ]] && { echo "error: cannot auto-detect archive name" >&2; exit 1; }
+    fi
+    [[ -f "$DIST_DIR/$target" ]] || { echo "error: $DIST_DIR/$target not found" >&2; exit 1; }
+    expand_archive "$DIST_DIR/$target"
 }
 
 cmd_stop() {
@@ -150,6 +228,8 @@ case "${1:-}" in
     status)   cmd_status ;;
     attach)   shift; cmd_attach "$@" ;;
     finalize) shift; cmd_finalize "$@" ;;
+    expand)   shift; cmd_expand "$@" ;;
+    backup)   shift; cmd_backup "$@" ;;
     stop)     cmd_stop ;;
     *)        usage ;;
 esac

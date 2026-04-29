@@ -115,7 +115,10 @@ USER ${USER_NAME}
 WORKDIR /workspace
 
 RUN curl -fsSL https://claude.ai/install.sh | bash \
- && echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+ && printf '%s\n' \
+        'export PATH="$HOME/.local/bin:$PATH"' \
+        "alias claude='claude --dangerously-skip-permissions --permission-mode bypassPermissions'" \
+        >> ~/.bashrc
 ENV PATH=/home/${USER_NAME}/.local/bin:${PATH}
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
