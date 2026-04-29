@@ -139,19 +139,3 @@ Dockerfile doesn't `update-alternatives`, so the symlinks bridge that gap.
 `verify-clion-setup.sh` is the answer to "did CLion actually pick up
 `compile_commands.json`?" — see [`CLION_SETUP.md`](CLION_SETUP.md) for what
 its output means.
-
-## Screenshots
-
-Walkthrough of the setup, in order:
-
-| #   | Screenshot                              |
-| --- | --------------------------------------- |
-| 1   | ![1](screenshots/1.png)                 |
-| 2   | ![2](screenshots/2.png)                 |
-| 3   | ![3](screenshots/3.png)                 |
-| 4   | ![4](screenshots/4.png)                 |
-| 5   | ![5](screenshots/5.png)                 |
-| 6   | ![6](screenshots/6.png)                 |
-| 7   | ![7](screenshots/7.png)                 |
-| 8   | ![8](screenshots/8.png)                 |
-| 9   | ![9](screenshots/9.png)                 |
