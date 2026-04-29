@@ -1,12 +1,8 @@
 # YTsaurus dev container
 
-Ubuntu 20.04 image with the full YTsaurus build toolchain (clang-18, cmake,
-ninja, conan, protoc, ccache), a non-root `dev` user with passwordless sudo,
-and an sshd on port 2222 for CLion / VSCode remote development.
+Ubuntu 20.04 + clang-18, cmake, ninja, conan, protoc, ccache. Non-root `dev` user with passwordless sudo, sshd on port 2222.
 
-## Build the image
-
-From the repo root (one level above `dev/`):
+## Build
 
 ```bash
 docker build -t ytsaurus-build \
@@ -15,44 +11,29 @@ docker build -t ytsaurus-build \
     dev/
 ```
 
-`USER_UID` / `USER_GID` matter so files written through the bind mount stay
-writable on the host.
-
-## Run the container
-
-Create it once with a named volume for ccache so rebuilds stay fast across
-runs:
+## Run
 
 ```bash
-docker run -it \
+docker run -d \
     --name ytsaurus-dev \
+    -p 2222:2222 \
     -v "$PWD":/workspace/ytsaurus \
     -v ytsaurus-ccache:/home/dev/.ccache \
     -w /workspace \
     ytsaurus-build
 ```
 
-Re-attach to the same container later:
-
 ```bash
-docker start -ai ytsaurus-dev
-```
-
-Open another shell into the running container:
-
-```bash
+docker start ytsaurus-dev
+docker stop ytsaurus-dev
 docker exec -it ytsaurus-dev bash
 ```
 
 ## Build YTsaurus
 
-### ya make (Arcadia-style)
-
 ```bash
 ./ya make yt/yt/server/all
 ```
-
-### CMake + Ninja
 
 ```bash
 cd build
@@ -65,27 +46,9 @@ cmake -G Ninja \
 ninja
 ```
 
-Build a single target:
+## SSH / Remote IDE
 
-```bash
-ninja <target>
-```
-
-Generate `compile_commands.json` for IDE indexing (CLion / clangd / VSCode):
-
-```bash
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .
-```
-
-The file lands at `build/compile_commands.json`.
-
-## Remote IDE access (CLion / VSCode)
-
-The container starts `sshd` on port 2222 automatically (see `entrypoint.sh`).
-A keypair is generated on first start at `/home/dev/.ssh/clion_key` and
-registered in `authorized_keys`.
-
-Copy the private key to the host:
+Copy the key once:
 
 ```bash
 docker cp ytsaurus-dev:/home/dev/.ssh/clion_key ~/.ssh/clion_key
@@ -95,41 +58,32 @@ chmod 600 ~/.ssh/clion_key
 Connect:
 
 ```bash
-ssh -i ~/.ssh/clion_key -p 2222 dev@<container-ip-or-localhost>
+ssh -i ~/.ssh/clion_key -p 2222 dev@localhost
 ```
 
-Publish the port to the host with `-p 2222:2222` on `docker run` if you need
-to reach it from outside Docker's bridge network.
+Password fallback: `dev` / `dev`.
 
-Password fallback (if you don't want to deal with keys): user `dev`, password
-`dev`.
+**CLion:** Toolchains → Remote Host → `localhost:2222`, user `dev`, key `~/.ssh/clion_key`. CMake build dir `/workspace/build`.
 
-### CLion
-
-1. Settings → Build, Execution, Deployment → Toolchains → **+** → Remote Host
-2. Credentials: host = container IP (or `localhost` if you forwarded the port),
-   port = `2222`, user = `dev`, auth = key file `~/.ssh/clion_key`
-3. Settings → Build → CMake → select that toolchain, build dir = `/workspace/build`
-4. Optionally: Settings → Build → Compilation Database → `/workspace/build`
-
-### VSCode
-
-Use the **Remote-SSH** extension and add a host entry:
+**VSCode:** Remote-SSH with:
 
 ```
 Host ytsaurus-dev
-    HostName <container-ip>
+    HostName localhost
     Port 2222
     User dev
     IdentityFile ~/.ssh/clion_key
 ```
 
-Then `Remote-SSH: Connect to Host…` → `ytsaurus-dev`.
+## CLion backend download
 
-## Files in this directory
+Gateway's downloader has no retry and dies on any network blip. Use `clion-backend-download.sh` instead — runs parallel `wget --continue` workers in tmux, survives drops and host suspend.
 
-| File             | Purpose                                                  |
-| ---------------- | -------------------------------------------------------- |
-| `Dockerfile`     | Builds the `ytsaurus-build` image.                       |
-| `entrypoint.sh`  | Starts sshd, generates host + user keys on first run.    |
-| `README.md`      | You are here.                                            |
+```bash
+pkill -f 'download.jetbrains.com'
+./clion-backend-download.sh start https://download.jetbrains.com/cpp/CLion-<build>.tar.gz
+./clion-backend-download.sh status
+./clion-backend-download.sh finalize
+```
+
+Then Gateway → **Reconnect**.

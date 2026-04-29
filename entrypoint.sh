@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-sudo ssh-keygen -A >/dev/null 2>&1 || true
+sudo ssh-keygen -A
 sudo mkdir -p /run/sshd
 
 mkdir -p "$HOME/.ssh"
@@ -16,7 +16,7 @@ if ! grep -qxF "$(cat "$HOME/.ssh/clion_key.pub")" "$HOME/.ssh/authorized_keys";
 fi
 
 if ! pgrep -fx "/usr/sbin/sshd -f /etc/ssh/sshd_config" >/dev/null; then
-    sudo /usr/sbin/sshd -f /etc/ssh/sshd_config
+    sudo /usr/sbin/sshd -f /etc/ssh/sshd_config || echo "WARNING: sshd failed to start" >&2
 fi
 
 if [ "$#" -eq 0 ]; then
