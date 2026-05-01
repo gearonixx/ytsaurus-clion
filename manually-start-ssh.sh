@@ -1,12 +1,12 @@
 #!/bin/bash
-# Start sshd inside the dev container so CLion (or any external SSH client) can connect.
+# Manually start sshd inside the dev container so CLion (or any external SSH client) can connect.
 #
-# Run this whenever you can't SSH into the container — typically because the container
-# was started with bash as PID 1 (e.g. via `docker exec` or `--entrypoint` override)
-# instead of through entrypoint.sh, so sshd was never started.
+# You normally don't need this — entrypoint.sh starts sshd automatically on `docker start`.
+# Run this only when sshd isn't up, typically because the container was started with bash as
+# PID 1 (e.g. via `docker exec` or `--entrypoint` override) instead of through entrypoint.sh.
 #
 # Usage (from inside the container):
-#     bash /workspace/ytsaurus/dev/start-ssh.sh
+#     bash /workspace/ytsaurus/dev/manually-start-ssh.sh
 #
 # Connect from outside:
 #     ssh -i ~/.ssh/clion_key -p 2222 dev@172.17.0.2
