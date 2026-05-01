@@ -1,0 +1,5 @@
+com.mallowigi:104.0.0
+IdeaVIM:2.33.0
+youngstead.relative-line-numbers:1.1.1
+com.github.dinbtechit.vscodetheme:1.12.0
+com.wakatime.intellij.plugin:16.0.1
